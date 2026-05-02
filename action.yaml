@@ -72,12 +72,18 @@ runs:
   steps:
 
     # ── 1. Download knoxctl ───────────────────────────────────────────────────
+    # v0.10.0 is released under accuknox/accuknox-cli-v2, not knoxctl-website.
+    # The install.sh script only knows about knoxctl-website releases (up to v0.9.x),
+    # so we download the binary directly from the GitHub release asset instead.
     - name: Download knoxctl
       shell: bash
       run: |
         BIN_DIR="$RUNNER_TEMP/knoxctl-bin"
         mkdir -p "$BIN_DIR"
-        curl -sfL https://knoxctl.accuknox.com/install.sh | sh -s -- -b "$BIN_DIR" v0.10.0
+        curl -sfL \
+          "https://github.com/accuknox/accuknox-cli-v2/releases/download/v0.10.0/knoxctl_Linux_x86_64.tar.gz" \
+          | tar -xz -C "$BIN_DIR" knoxctl
+        chmod +x "$BIN_DIR/knoxctl"
         echo "$BIN_DIR" >> "$GITHUB_PATH"
         knoxctl version
 
