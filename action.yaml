@@ -187,18 +187,32 @@ runs:
       id: upload-saas
       shell: bash
       run: |
+        BOM_FILE="${{ steps.names.outputs.bom_file }}"
+
+        echo "=== BOM file preview (first 50 lines) ==="
+        head -50 "$BOM_FILE"
+
+        echo "=== File size ==="
+        ls -lh "$BOM_FILE"
+
+        echo "=== curl command ==="
+        echo "POST https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&label_id=${{ inputs.label }}&save_to_s3=true"
+        echo "Authorization: Bearer ${{ inputs.token }}"
+
         HTTP_STATUS=$(curl \
           --silent \
-          --location \
+          --insecure \
           --request POST \
           --output /tmp/ak_response.json \
           --write-out "%{http_code}" \
-          --header "Authorization: Token ${{ inputs.token }}" \
-          --form "file=@${{ steps.names.outputs.bom_file }}" \
-          "https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&save_to_s3=true&label_id=${{ inputs.label }}")
+          --header "Authorization: Bearer ${{ inputs.token }}" \
+          --form "file=@${BOM_FILE}" \
+          "https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&label_id=${{ inputs.label }}&save_to_s3=true")
+
+        echo "=== Response (HTTP ${HTTP_STATUS}) ==="
+        cat /tmp/ak_response.json
 
         echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
-        [ -s /tmp/ak_response.json ] && cat /tmp/ak_response.json
 
         if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
           echo "::error::Upload failed (HTTP ${HTTP_STATUS})"
