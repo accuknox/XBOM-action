@@ -1,0 +1,199 @@
+name: "AccuKnox xBOM Scan"
+
+description: >
+  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, upload to AccuKnox SaaS,
+  and save as a downloadable GitHub Actions artifact.
+
+author: "AccuKnox"
+
+branding:
+  icon: "shield"
+  color: "blue"
+
+inputs:
+
+  bom-type:
+    description: "sbom | cbom | aibom"
+    required: false
+    default: "sbom"
+
+  path:
+    description: "Directory to scan. Ignored when image is set."
+    required: false
+    default: "."
+
+  image:
+    description: "Container image to scan (e.g. myapp:latest). Mutually exclusive with path."
+    required: false
+    default: ""
+
+  aibom-model:
+    description: "HuggingFace model name (e.g. meta-llama/Llama-2-7b). Required when bom-type=aibom."
+    required: false
+    default: ""
+
+  token:
+    description: "AccuKnox artifact token. https://help.accuknox.com/how-to/how-to-create-tokens/"
+    required: true
+
+  endpoint:
+    description: "AccuKnox SaaS hostname, e.g. cspm.accuknox.com"
+    required: true
+
+  label:
+    description: "AccuKnox label. https://help.accuknox.com/how-to/how-to-create-labels/"
+    required: true
+
+  project-name:
+    description: "AccuKnox project name (Console → SBOM → Projects)."
+    required: true
+
+  artifact-classifier:
+    description: "project_classifier in the BOM (e.g. container, application, firmware)."
+    required: true
+
+  output-file:
+    description: "Local path to write the BOM file. Auto-derived when omitted: <repo>-<bom-type>.json"
+    required: false
+    default: ""
+
+outputs:
+
+  bom-file:
+    description: "Path to the generated BOM file on the runner."
+    value: ${{ steps.names.outputs.bom_file }}
+
+  upload-status:
+    description: "HTTP status code from the AccuKnox SaaS upload."
+    value: ${{ steps.upload-saas.outputs.http_status }}
+
+runs:
+  using: "composite"
+  steps:
+
+    # ── 1. Download knoxctl ───────────────────────────────────────────────────
+    - name: Download knoxctl
+      shell: bash
+      run: |
+        BIN_DIR="$RUNNER_TEMP/knoxctl-bin"
+        mkdir -p "$BIN_DIR"
+        curl -sfL https://knoxctl.accuknox.com/install.sh | sh -s -- -b "$BIN_DIR" v0.10.0
+        echo "$BIN_DIR" >> "$GITHUB_PATH"
+        knoxctl version
+
+    # ── 2. Resolve BOM output path ────────────────────────────────────────────
+    - name: Resolve output path
+      id: names
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.output-file }}" ]; then
+          BOM_FILE="${{ inputs.output-file }}"
+        else
+          REPO_SLUG=$(echo "${GITHUB_REPOSITORY}" | tr '/' '-')
+          BOM_FILE="${GITHUB_WORKSPACE}/${REPO_SLUG}-${{ inputs.bom-type }}.json"
+        fi
+        echo "bom_file=${BOM_FILE}" >> "$GITHUB_OUTPUT"
+
+    # ── 3a. SBOM ──────────────────────────────────────────────────────────────
+    # knoxctl pkgscan wraps syft.
+    # dir:<path>       → filesystem scan
+    # registry:<image> → pull directly from registry (no daemon needed)
+    - name: "SBOM"
+      if: inputs.bom-type == 'sbom'
+      shell: bash
+      run: |
+        BOM_FILE="${{ steps.names.outputs.bom_file }}"
+        if [ -n "${{ inputs.image }}" ]; then
+          SOURCE="registry:${{ inputs.image }}"
+        else
+          SOURCE="dir:${{ inputs.path }}"
+        fi
+        knoxctl pkgscan "$SOURCE" -o "cyclonedx-json=${BOM_FILE}" --quiet
+
+    # ── 3b. CBOM ──────────────────────────────────────────────────────────────
+    # cbom source → scans Go source code
+    # cbom image  → scans a container image
+    - name: "CBOM"
+      if: inputs.bom-type == 'cbom'
+      shell: bash
+      run: |
+        BOM_FILE="${{ steps.names.outputs.bom_file }}"
+        if [ -n "${{ inputs.image }}" ]; then
+          knoxctl cbom image "${{ inputs.image }}" --out "$BOM_FILE"
+        else
+          knoxctl cbom source "${{ inputs.path }}" --out "$BOM_FILE"
+        fi
+
+    # ── 3c. AIBOM ─────────────────────────────────────────────────────────────
+    # Fetches model metadata from HuggingFace Hub API.
+    - name: "AIBOM"
+      if: inputs.bom-type == 'aibom'
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.aibom-model }}" ]; then
+          echo "::error::aibom-model is required when bom-type=aibom"
+          exit 1
+        fi
+        knoxctl aibom generate \
+          --name   "${{ inputs.aibom-model }}" \
+          --out    "${{ steps.names.outputs.bom_file }}" \
+          --format json
+
+    # ── 4. Patch BOM JSON ─────────────────────────────────────────────────────
+    # Injects project_name and project_classifier as top-level fields:
+    #
+    #   {
+    #     "$schema":            "http://cyclonedx.org/schema/bom-1.6.schema.json",
+    #     "project_name":       "<project-name>",
+    #     "project_classifier": "<classifier>",
+    #     "bomFormat":          "CycloneDX",
+    #     ...
+    #   }
+    - name: Patch BOM JSON
+      shell: bash
+      env:
+        BOM_FILE:   ${{ steps.names.outputs.bom_file }}
+        PROJECT:    ${{ inputs.project-name }}
+        CLASSIFIER: ${{ inputs.artifact-classifier }}
+      run: |
+        PATCHED=$(jq \
+          --arg project    "$PROJECT" \
+          --arg classifier "$CLASSIFIER" \
+          '( if has("$schema") then {"$schema": .["$schema"]} else {} end )
+           + {"project_name": $project, "project_classifier": $classifier}
+           + ( del(.["$schema"]) )' \
+          "$BOM_FILE")
+        echo "$PATCHED" > "$BOM_FILE"
+
+    # ── 5. Upload to AccuKnox SaaS ────────────────────────────────────────────
+    - name: Upload to AccuKnox SaaS
+      id: upload-saas
+      shell: bash
+      run: |
+        HTTP_STATUS=$(curl \
+          --silent \
+          --output /tmp/ak_response.json \
+          --write-out "%{http_code}" \
+          --request POST \
+          --header  "Authorization: Token ${{ inputs.token }}" \
+          --form    "file=@${{ steps.names.outputs.bom_file }};type=application/json" \
+          --form    "label=${{ inputs.label }}" \
+          "https://${{ inputs.endpoint }}/api/v1/artifact/")
+
+        echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
+        [ -s /tmp/ak_response.json ] && cat /tmp/ak_response.json
+
+        if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+          echo "::error::Upload failed (HTTP ${HTTP_STATUS})"
+          exit 1
+        fi
+
+    # ── 6. Save artifact ──────────────────────────────────────────────────────
+    # Download: Actions tab → workflow run → Artifacts
+    - name: Save BOM artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ github.repository_owner }}-${{ inputs.bom-type }}-${{ github.run_number }}
+        path: ${{ steps.names.outputs.bom_file }}
+        retention-days: 30
+        if-no-files-found: warn
