@@ -77,7 +77,7 @@ runs:
       run: |
         BIN_DIR="$RUNNER_TEMP/knoxctl-bin"
         mkdir -p "$BIN_DIR"
-        curl -sfL \
+        curl -sfL -L \
           "https://github.com/accuknox/accuknox-cli-v2/releases/download/v0.10.0/knoxctl_0.10.0_linux_amd64.tar.gz" \
           | tar -xz -C "$BIN_DIR"
         chmod +x "$BIN_DIR/knoxctl"
