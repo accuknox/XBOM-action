@@ -193,7 +193,7 @@ runs:
           --request POST \
           --output /tmp/ak_response.json \
           --write-out "%{http_code}" \
-          --header "Authorization: Bearer ${{ inputs.token }}" \
+          --header "Authorization: Token ${{ inputs.token }}" \
           --form "file=@${{ steps.names.outputs.bom_file }}" \
           "https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&save_to_s3=true&label_id=${{ inputs.label }}")
 
