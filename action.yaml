@@ -186,30 +186,24 @@ runs:
     - name: Upload to AccuKnox SaaS
       id: upload-saas
       shell: bash
+      env:
+        AK_TOKEN:    ${{ inputs.token }}
+        AK_ENDPOINT: ${{ inputs.endpoint }}
+        AK_LABEL:    ${{ inputs.label }}
+        BOM_FILE:    ${{ steps.names.outputs.bom_file }}
       run: |
-        BOM_FILE="${{ steps.names.outputs.bom_file }}"
-
-        echo "=== BOM file preview (first 50 lines) ==="
-        head -50 "$BOM_FILE"
-
-        echo "=== File size ==="
-        ls -lh "$BOM_FILE"
-
-        echo "=== curl command ==="
-        echo "POST https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&label_id=${{ inputs.label }}&save_to_s3=true"
-        echo "Authorization: Bearer ${{ inputs.token }}"
-
-        HTTP_STATUS=$(curl \
-          --silent \
-          --insecure \
-          --request POST \
+        HTTP_STATUS=$(curl -v -X POST \
+          "https://${AK_ENDPOINT}/api/v1/artifact/?data_type=SBOM&label_id=${AK_LABEL}&save_to_s3=true" \
+          -H "Authorization: Bearer ${AK_TOKEN}" \
+          --form "file=@${BOM_FILE}" \
           --output /tmp/ak_response.json \
           --write-out "%{http_code}" \
-          --header "Authorization: Bearer ${{ inputs.token }}" \
-          --form "file=@${BOM_FILE}" \
-          "https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&label_id=${{ inputs.label }}&save_to_s3=true")
+          --insecure 2>&1 | tee /tmp/ak_curl_log.txt | tail -1)
 
-        echo "=== Response (HTTP ${HTTP_STATUS}) ==="
+        echo "=== curl log ==="
+        grep -E "^[<>*]" /tmp/ak_curl_log.txt || true
+
+        echo "=== response ==="
         cat /tmp/ak_response.json
 
         echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
