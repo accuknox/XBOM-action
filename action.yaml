@@ -189,13 +189,13 @@ runs:
       run: |
         HTTP_STATUS=$(curl \
           --silent \
+          --location \
+          --request POST \
           --output /tmp/ak_response.json \
           --write-out "%{http_code}" \
-          --request POST \
-          --header  "Authorization: Token ${{ inputs.token }}" \
-          --form    "file=@${{ steps.names.outputs.bom_file }};type=application/json" \
-          --form    "label=${{ inputs.label }}" \
-          "https://${{ inputs.endpoint }}/api/v1/artifact/")
+          --header "Authorization: Bearer ${{ inputs.token }}" \
+          --form "file=@${{ steps.names.outputs.bom_file }}" \
+          "https://${{ inputs.endpoint }}/api/v1/artifact/?data_type=SBOM&save_to_s3=true&label_id=${{ inputs.label }}")
 
         echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
         [ -s /tmp/ak_response.json ] && cat /tmp/ak_response.json
