@@ -28,7 +28,7 @@ Add the following secrets to your repository (**Settings → Secrets and variabl
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `bom-type` | No | `sbom` | `sbom` / `cbom` / `aibom` |
+| `bom-type` | yes | `sbom` | `sbom` / `cbom` / `aibom` |
 | `path` | No | `.` | Directory to scan (filesystem scans) |
 | `image` | No | — | Container image to scan. Used by `cbom` only, e.g. `myapp:latest` |
 | `aibom-model` | No | — | HuggingFace model ID, e.g. `google-bert/bert-base-uncased` |
