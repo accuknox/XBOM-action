@@ -8,7 +8,7 @@ Generate a Bill of Materials (BOM) using [knoxctl](https://github.com/accuknox/a
 |---|---|---|
 | `sbom` | `knoxctl pkgscan` | Filesystem or container image |
 | `cbom` | `knoxctl cbom` | Go source code or container image |
-| `aibom` | `knoxctl aibom generate` | HuggingFace model |
+| `aibom` | `knoxctl aibom ` | HuggingFace model |
 
 ---
 
@@ -28,12 +28,12 @@ Add the following secrets to your repository (**Settings → Secrets and variabl
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `bom-type` | No | `sbom` | `sbom` / `cbom` / `aibom` |
+| `bom-type` | **Yes** | `sbom` | `sbom` / `cbom` / `aibom` |
 | `path` | No | `.` | Directory to scan (filesystem scans) |
-| `image` | No | — | Container image to scan. Used by `cbom` only, e.g. `myapp:latest` |
-| `aibom-model` | No | — | HuggingFace model ID, e.g. `google-bert/bert-base-uncased` |
+| `image` | No | — | Container image to scan. Used by `cbom`, e.g. `myapp:latest` |
+| `aibom-model` | No | — | HuggingFace model ID, e.g. `deepseek-ai/DeepSeek-V4-Pro` |
 | `token` | **Yes** | — | AccuKnox API token |
-| `endpoint` | **Yes** | — | AccuKnox SaaS hostname |
+| `endpoint` | **Yes** | — | AccuKnox SaaS hostname (eg, `cspm.accuknox.com` |
 | `label` | **Yes** | — | AccuKnox label name |
 
 ---
@@ -43,7 +43,6 @@ Add the following secrets to your repository (**Settings → Secrets and variabl
 ### SBOM — Filesystem
 
 Scans the repository source tree for packages and dependencies.  
-> ℹ️ Filesystem scan does **not** scan Docker image contents.
 
 ```yaml
 - uses: accuknox/xbom-scan-action@v1.0
@@ -54,7 +53,7 @@ Scans the repository source tree for packages and dependencies.
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:              ${{ secrets.ACCUKNOX_LABEL }}
     project-name:       my-project
-    project-classifier: container
+    project-classifier: application
 ```
 
 ---
@@ -112,7 +111,7 @@ Inventories AI/ML model components by fetching metadata from the HuggingFace Hub
 - uses: accuknox/xbom-scan-action@v1.0
   with:
     bom-type:           aibom
-    aibom-model:        google-bert/bert-base-uncased
+    aibom-model:        deepseek-ai/DeepSeek-V4-Pro
     token:              ${{ secrets.ACCUKNOX_TOKEN }}
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:              ${{ secrets.ACCUKNOX_LABEL }}
