@@ -36,11 +36,6 @@ inputs:
     description: "AccuKnox artifact token. https://help.accuknox.com/how-to/how-to-create-tokens/"
     required: true
 
-  tenant-id:
-    description: "AccuKnox tenant ID. Sent as Tenant-Id header when provided."
-    required: false
-    default: ""
-
   endpoint:
     description: "AccuKnox SaaS hostname, e.g. cspm.accuknox.com"
     required: true
@@ -53,7 +48,7 @@ inputs:
     description: "AccuKnox project name (Console → SBOM → Projects)."
     required: true
 
-  artifact-classifier:
+  project-classifier:
     description: "project_classifier in the BOM (e.g. container, application, firmware)."
     required: true
 
@@ -82,23 +77,11 @@ runs:
       run: |
         BIN_DIR="$RUNNER_TEMP/knoxctl-bin"
         mkdir -p "$BIN_DIR"
-
         curl -fL \
           "https://github.com/accuknox/accuknox-cli-v2/releases/download/v0.10.0/knoxctl_0.10.0_linux_amd64.tar.gz" \
           -o "$RUNNER_TEMP/knoxctl.tar.gz"
-
-        echo "Tarball contents:"
-        tar -tzf "$RUNNER_TEMP/knoxctl.tar.gz"
-
         tar -xzf "$RUNNER_TEMP/knoxctl.tar.gz" -C "$BIN_DIR"
-
-        echo "Extracted files:"
-        ls -la "$BIN_DIR"
-
-        # Handle both flat binary and possible subdirectory
-        find "$BIN_DIR" -name "knoxctl" -type f -exec chmod +x {} \; -exec cp {} "$BIN_DIR/knoxctl" \; 2>/dev/null || true
-        chmod +x "$BIN_DIR"/knoxctl* 2>/dev/null || true
-
+        chmod +x "$BIN_DIR/knoxctl"
         echo "$BIN_DIR" >> "$GITHUB_PATH"
         export PATH="$BIN_DIR:$PATH"
         knoxctl version
@@ -135,19 +118,31 @@ runs:
     # ── 3b. CBOM ──────────────────────────────────────────────────────────────
     # cbom source → scans Go source code
     # cbom image  → scans a container image
+    # ── 3b. CBOM ──────────────────────────────────────────────────────────────
+    # knoxctl cbom source <path>  → scans Go source code
+    # knoxctl cbom image  <ref>   → scans a container image
+    # Flags: --out, --name, --format (json default), --description, --version
     - name: "CBOM"
       if: inputs.bom-type == 'cbom'
       shell: bash
       run: |
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
         if [ -n "${{ inputs.image }}" ]; then
-          knoxctl cbom image "${{ inputs.image }}" --out "$BOM_FILE"
+          echo "CBOM scanning image: ${{ inputs.image }}"
+          knoxctl cbom image "${{ inputs.image }}" \
+            --out    "$BOM_FILE" \
+            --format json
         else
-          knoxctl cbom source "${{ inputs.path }}" --out "$BOM_FILE"
+          echo "CBOM scanning source: ${{ inputs.path }}"
+          knoxctl cbom source "${{ inputs.path }}" \
+            --out    "$BOM_FILE" \
+            --format json
         fi
 
     # ── 3c. AIBOM ─────────────────────────────────────────────────────────────
-    # Fetches model metadata from HuggingFace Hub API.
+    # knoxctl aibom generate --model <hf-model> → fetches metadata from HuggingFace Hub API
+    # Flags: --model (required), --out, --format (json default)
+    # --name and --version override the values fetched from HuggingFace
     - name: "AIBOM"
       if: inputs.bom-type == 'aibom'
       shell: bash
@@ -156,8 +151,9 @@ runs:
           echo "::error::aibom-model is required when bom-type=aibom"
           exit 1
         fi
+        echo "AIBOM scanning model: ${{ inputs.aibom-model }}"
         knoxctl aibom generate \
-          --name   "${{ inputs.aibom-model }}" \
+          --model  "${{ inputs.aibom-model }}" \
           --out    "${{ steps.names.outputs.bom_file }}" \
           --format json
 
@@ -176,7 +172,7 @@ runs:
       env:
         BOM_FILE:   ${{ steps.names.outputs.bom_file }}
         PROJECT:    ${{ inputs.project-name }}
-        CLASSIFIER: ${{ inputs.artifact-classifier }}
+        CLASSIFIER: ${{ inputs.project-classifier }}
       run: |
         PATCHED=$(jq \
           --arg project    "$PROJECT" \
@@ -195,25 +191,18 @@ runs:
         AK_TOKEN:     ${{ inputs.token }}
         AK_ENDPOINT:  ${{ inputs.endpoint }}
         AK_LABEL:     ${{ inputs.label }}
-        AK_TENANT_ID: ${{ inputs.tenant-id }}
         BOM_FILE:     ${{ steps.names.outputs.bom_file }}
       run: |
-        TENANT_HEADER=""
-        [ -n "${AK_TENANT_ID}" ] && TENANT_HEADER="--header \"Tenant-Id: ${AK_TENANT_ID}\""
-
         HTTP_STATUS=$(curl --location \
           "https://${AK_ENDPOINT}/api/v1/artifact/?data_type=SBOM&save_to_s3=True&label_id=${AK_LABEL}" \
           --header "Authorization: Bearer ${AK_TOKEN}" \
-          ${TENANT_HEADER} \
           --form "file=@${BOM_FILE}" \
           --output /tmp/ak_response.json \
           --write-out "%{http_code}" \
           --insecure)
 
-        echo "=== response ==="
-        cat /tmp/ak_response.json
-
         echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
+        cat /tmp/ak_response.json
 
         if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
           echo "::error::Upload failed (HTTP ${HTTP_STATUS})"
