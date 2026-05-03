@@ -56,7 +56,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 | `image` | No | — | Container image to scan (`cbom` only) |
 | `aibom-model` | No | — | HuggingFace model ID (`aibom` only) |
 | `token` | **Yes** | — | AccuKnox API token |
-| `endpoint` | **Yes** | — | AccuKnox SaaS hostname |
+| `endpoint` | **Yes** | — | AccuKnox Endpoint (eg, `cspm.accuknox.com` |
 | `label` | **Yes** | — | AccuKnox label name |
 
 ---
