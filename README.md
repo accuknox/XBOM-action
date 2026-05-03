@@ -8,7 +8,7 @@ Generate a Bill of Materials (BOM) using [knoxctl](https://github.com/accuknox/a
 |---|---|---|
 | `sbom` | `knoxctl pkgscan` | Filesystem or container image |
 | `cbom` | `knoxctl cbom` | Go source code or container image |
-| `aibom` | `knoxctl aibom generate` | HuggingFace model |
+| `aibom` | `knoxctl aibom` | HuggingFace model |
 
 ---
 
