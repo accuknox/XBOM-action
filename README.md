@@ -8,7 +8,7 @@ Generate a Bill of Materials (BOM) using [knoxctl](https://github.com/accuknox/a
 |---|---|---|
 | `sbom` | `knoxctl pkgscan` | Filesystem or container image |
 | `cbom` | `knoxctl cbom` | Go source code or container image |
-| `aibom` | `knoxctl aibom` | HuggingFace model |
+| `aibom` | `knoxctl aibom generate` | HuggingFace model |
 
 ---
 
@@ -28,7 +28,7 @@ Add the following secrets to your repository (**Settings → Secrets and variabl
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `bom-type` | yes | `sbom` | `sbom` / `cbom` / `aibom` |
+| `bom-type` | No | `sbom` | `sbom` / `cbom` / `aibom` |
 | `path` | No | `.` | Directory to scan (filesystem scans) |
 | `image` | No | — | Container image to scan. Used by `cbom` only, e.g. `myapp:latest` |
 | `aibom-model` | No | — | HuggingFace model ID, e.g. `google-bert/bert-base-uncased` |
@@ -46,7 +46,7 @@ Scans the repository source tree for packages and dependencies.
 > ℹ️ Filesystem scan does **not** scan Docker image contents.
 
 ```yaml
-- uses: accuknox/xbom-scan-action@v1
+- uses: accuknox/xbom-scan-action@v1.0
   with:
     bom-type:           sbom
     path:               "."
@@ -64,7 +64,7 @@ Scans the repository source tree for packages and dependencies.
 Scans Go source code for cryptographic algorithms, protocols, and certificates.
 
 ```yaml
-- uses: accuknox/xbom-scan-action@v1
+- uses: accuknox/xbom-scan-action@v1.0
   with:
     bom-type:           cbom
     path:               "."
@@ -91,7 +91,7 @@ Scans a container image for cryptographic algorithms, protocols, and certificate
     docker build -t "$IMAGE" .
     echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-- uses: accuknox/xbom-scan-action@v1
+- uses: accuknox/xbom-scan-action@v1.0
   with:
     bom-type:           cbom
     image:              ${{ steps.build.outputs.image }}
@@ -109,7 +109,7 @@ Scans a container image for cryptographic algorithms, protocols, and certificate
 Inventories AI/ML model components by fetching metadata from the HuggingFace Hub API.
 
 ```yaml
-- uses: accuknox/xbom-scan-action@v1
+- uses: accuknox/xbom-scan-action@v1.0
   with:
     bom-type:           aibom
     aibom-model:        google-bert/bert-base-uncased
@@ -139,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: accuknox/xbom-scan-action@v1
+      - uses: accuknox/xbom-scan-action@v1.0
         with:
           bom-type:           sbom
           path:               "."
@@ -187,7 +187,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: accuknox/xbom-scan-action@v1
+      - uses: accuknox/xbom-scan-action@v1.0
         with:
           bom-type:           sbom
           path:               "."
@@ -201,5 +201,3 @@ jobs:
         with:
           sbom-artifact-match: ".*\\.json$"
 ```
-
-> **Reference:** [anchore/sbom-action — Publishing SBOMs with releases](https://github.com/anchore/sbom-action#publishing-sboms-with-releases)
