@@ -129,7 +129,8 @@ runs:
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
         if [ -n "${{ inputs.image }}" ]; then
           echo "CBOM scanning image: ${{ inputs.image }}"
-          knoxctl cbom image "${{ inputs.image }}" \
+          knoxctl cbom image \
+            --image  "${{ inputs.image }}" \
             --out    "$BOM_FILE" \
             --format json
         else
@@ -138,7 +139,6 @@ runs:
             --out    "$BOM_FILE" \
             --format json
         fi
-
     # ── 3c. AIBOM ─────────────────────────────────────────────────────────────
     # knoxctl aibom generate --model <hf-model> → fetches metadata from HuggingFace Hub API
     # Flags: --model (required), --out, --format (json default)
