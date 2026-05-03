@@ -51,7 +51,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `bom-type` | No | `sbom` | `sbom` / `cbom` / `aibom` |
+| `bom-type` | **Yes** | `sbom` | `sbom` / `cbom` / `aibom` |
 | `path` | No | `.` | Directory to scan |
 | `image` | No | — | Container image to scan (`cbom` only) |
 | `aibom-model` | No | — | HuggingFace model ID (`aibom` only) |
