@@ -36,6 +36,11 @@ inputs:
     description: "AccuKnox artifact token. https://help.accuknox.com/how-to/how-to-create-tokens/"
     required: true
 
+  tenant-id:
+    description: "AccuKnox tenant ID. Sent as Tenant-Id header when provided."
+    required: false
+    default: ""
+
   endpoint:
     description: "AccuKnox SaaS hostname, e.g. cspm.accuknox.com"
     required: true
@@ -187,21 +192,23 @@ runs:
       id: upload-saas
       shell: bash
       env:
-        AK_TOKEN:    ${{ inputs.token }}
-        AK_ENDPOINT: ${{ inputs.endpoint }}
-        AK_LABEL:    ${{ inputs.label }}
-        BOM_FILE:    ${{ steps.names.outputs.bom_file }}
+        AK_TOKEN:     ${{ inputs.token }}
+        AK_ENDPOINT:  ${{ inputs.endpoint }}
+        AK_LABEL:     ${{ inputs.label }}
+        AK_TENANT_ID: ${{ inputs.tenant-id }}
+        BOM_FILE:     ${{ steps.names.outputs.bom_file }}
       run: |
-        HTTP_STATUS=$(curl -v -X POST \
-          "https://${AK_ENDPOINT}/api/v1/artifact/?data_type=SBOM&label_id=${AK_LABEL}&save_to_s3=true" \
-          -H "Authorization: Bearer ${AK_TOKEN}" \
+        TENANT_HEADER=""
+        [ -n "${AK_TENANT_ID}" ] && TENANT_HEADER="--header \"Tenant-Id: ${AK_TENANT_ID}\""
+
+        HTTP_STATUS=$(curl --location \
+          "https://${AK_ENDPOINT}/api/v1/artifact/?data_type=SBOM&save_to_s3=True&label_id=${AK_LABEL}" \
+          --header "Authorization: Bearer ${AK_TOKEN}" \
+          ${TENANT_HEADER} \
           --form "file=@${BOM_FILE}" \
           --output /tmp/ak_response.json \
           --write-out "%{http_code}" \
-          --insecure 2>&1 | tee /tmp/ak_curl_log.txt | tail -1)
-
-        echo "=== curl log ==="
-        grep -E "^[<>*]" /tmp/ak_curl_log.txt || true
+          --insecure)
 
         echo "=== response ==="
         cat /tmp/ak_response.json
