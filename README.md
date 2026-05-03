@@ -19,8 +19,8 @@
 The **AccuKnox xBOM Scan Action** integrates seamlessly into your GitHub workflow to:
 
 - 🔍 **Scan** your source code, Go projects, or AI/ML models
-- 📦 **Generate** CycloneDX-compliant BOMs (SBOM, CBOM, AIBOM)
-- ☁️ **Upload** results directly to AccuKnox SaaS
+- 📦 **Generate** compliant BOMs (SBOM, CBOM, AIBOM)
+- ☁️ **Upload** results directly to AccuKnox Dashboard
 - 💾 **Save** the BOM as a downloadable GitHub Actions artifact
 
 ---
