@@ -19,8 +19,8 @@
 The **AccuKnox xBOM Scan Action** integrates seamlessly into your GitHub workflow to:
 
 - 🔍 **Scan** your source code, Go projects, or AI/ML models
-- 📦 **Generate** compliant BOMs (SBOM, CBOM, AIBOM)
-- ☁️ **Upload** results directly to AccuKnox Dashboard
+- 📦 **Generate** CycloneDX-compliant BOMs (SBOM, CBOM, AIBOM)
+- ☁️ **Upload** results directly to AccuKnox SaaS
 - 💾 **Save** the BOM as a downloadable GitHub Actions artifact
 
 ---
@@ -51,12 +51,13 @@ Add the following to your repository under **Settings → Secrets and variables 
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `bom-type` | **Yes** | `sbom` | `sbom` / `cbom` / `aibom` |
+| `bom-type` | No | `sbom` | `sbom` / `cbom` / `aibom` |
 | `path` | No | `.` | Directory to scan |
 | `image` | No | — | Container image to scan (`cbom` only) |
 | `aibom-model` | No | — | HuggingFace model ID (`aibom` only) |
+| `cbom-plugins` | No | — | Comma-separated plugins for `cbom image` scan, e.g. `certificates,keys` |
 | `token` | **Yes** | — | AccuKnox API token |
-| `endpoint` | **Yes** | — | AccuKnox Endpoint (eg, `cspm.accuknox.com` |
+| `endpoint` | **Yes** | — | AccuKnox SaaS hostname |
 | `label` | **Yes** | — | AccuKnox label name |
 
 ---
@@ -103,20 +104,22 @@ Add the following to your repository under **Settings → Secrets and variables 
 
 > Scans a container image for cryptographic algorithms, protocols, and certificates.
 >
-> ⚠️ The build step and scan action **must be in the same job** to share the Docker daemon on the same runner.
+> ⚠️ The build step and scan action **must be in the same job** to share the same runner. The action only needs the final image reference — build it any way you want (`docker`, `podman`, `buildah`, `ko`, etc.).
 
 ```yaml
+# Build your image however you want — just expose the tag as a step output
 - name: Build image
   id: build
   run: |
     IMAGE="myapp:${{ github.sha }}"
-    docker build -t "$IMAGE" .
+    docker build -t "$IMAGE" .          # replace with your build tool
     echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
 - uses: accuknox/xbom-scan-action@v1.0
   with:
     bom-type:           cbom
     image:              ${{ steps.build.outputs.image }}
+    cbom-plugins:       certificates,keys    # optional — omit to scan all
     token:              ${{ secrets.ACCUKNOX_TOKEN }}
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:              ${{ secrets.ACCUKNOX_LABEL }}
