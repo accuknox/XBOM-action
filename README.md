@@ -42,7 +42,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 | Secret | Description |
 |---|---|
 | `ACCUKNOX_TOKEN` | AccuKnox API token → [How to create](https://help.accuknox.com/how-to/how-to-create-tokens/) |
-| `ACCUKNOX_ENDPOINT` | AccuKnox SaaS hostname, e.g. `cspm.accuknox.com` |
+| `ACCUKNOX_ENDPOINT` | AccuKnox endpoint, e.g. `cspm.accuknox.com` |
 | `ACCUKNOX_LABEL` | AccuKnox label → [How to create](https://help.accuknox.com/how-to/how-to-create-labels/) |
 
 ---
@@ -51,7 +51,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 
 | Input | Required | Default | Description |
 |---|---|---|---|
-| `bom-type` | No | `sbom` | `sbom` / `cbom` / `aibom` |
+| `bom-type` | **Yes** | `sbom` | `sbom` / `cbom` / `aibom` |
 | `path` | No | `.` | Directory to scan |
 | `image` | No | — | Container image to scan (`cbom` only) |
 | `aibom-model` | No | — | HuggingFace model ID (`aibom` only) |
@@ -119,7 +119,7 @@ Add the following to your repository under **Settings → Secrets and variables 
   with:
     bom-type:           cbom
     image:              ${{ steps.build.outputs.image }}
-    cbom-plugins:       certificates,keys    # optional — omit to scan all
+    cbom-plugins:       certificates, keys    # optional — omit to scan all
     token:              ${{ secrets.ACCUKNOX_TOKEN }}
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:              ${{ secrets.ACCUKNOX_LABEL }}
@@ -226,9 +226,6 @@ jobs:
         with:
           sbom-artifact-match: ".*\\.json$"
 ```
-
-> 📖 Reference: [anchore/sbom-action — Publishing SBOMs with releases](https://github.com/anchore/sbom-action#publishing-sboms-with-releases)
-
 ---
 
 <div align="center">
