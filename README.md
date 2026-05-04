@@ -69,7 +69,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 > Scans the repository source tree for packages and dependencies.
 
 ```yaml
-- uses: accuknox/xbom-scan-action@1.0
+- uses: accuknox/xbom-action@1.0
   with:
     bom-type:           sbom
     path:               "."
@@ -87,7 +87,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 > Scans Go source code for cryptographic algorithms, protocols, and certificates.
 
 ```yaml
-- uses: accuknox/xbom-scan-action@1.0
+- uses: accuknox/xbom-action@1.0
   with:
     bom-type:           cbom
     path:               "."
@@ -115,7 +115,7 @@ Add the following to your repository under **Settings → Secrets and variables 
     docker build -t "$IMAGE" .          # replace with your build tool
     echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-- uses: accuknox/xbom-scan-action@1.0
+- uses: accuknox/xbom-action@1.0
   with:
     bom-type:           cbom
     image:              ${{ steps.build.outputs.image }}
@@ -134,7 +134,7 @@ Add the following to your repository under **Settings → Secrets and variables 
 > Inventories AI/ML model components by fetching metadata from the HuggingFace Hub API.
 
 ```yaml
-- uses: accuknox/xbom-scan-action@1.0
+- uses: accuknox/xbom-action@1.0
   with:
     bom-type:           aibom
     aibom-model:        google-bert/bert-base-uncased
@@ -165,7 +165,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: accuknox/xbom-scan-action@1.0
+      - uses: accuknox/xbom-action@1.0
         with:
           bom-type:           sbom
           path:               "."
@@ -178,9 +178,9 @@ jobs:
 
 ---
 
-## Downloading the BOM Artifact
+## Downloading the BOM Artefact
 
-After the workflow runs the generated BOM is saved as a GitHub Actions artifact:
+After the workflow runs, the generated BOM is saved as a GitHub Actions artefact:
 
 1. Go to your repository on GitHub
 2. Click **Actions**
@@ -212,7 +212,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: accuknox/xbom-scan-action@1.0
+      - uses: accuknox/xbom-action@1.0
         with:
           bom-type:           sbom
           path:               "."
