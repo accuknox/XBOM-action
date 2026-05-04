@@ -1,8 +1,7 @@
 name: "AccuKnox xBOM Scan"
 
 description: >
-  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, upload to AccuKnox SaaS,
-  and save as a downloadable GitHub Actions artifact.
+  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, upload to AccuKnox Dashboard
 
 author: "AccuKnox"
 
