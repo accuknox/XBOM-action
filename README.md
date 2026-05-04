@@ -227,9 +227,3 @@ jobs:
           sbom-artifact-match: ".*\\.json$"
 ```
 ---
-
-<div align="center">
-
-Made with ❤️ by [AccuKnox](https://www.accuknox.com)
-
-</div>
