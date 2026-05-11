@@ -1,7 +1,7 @@
 name: "AccuKnox xBOM Scan"
 
 description: >
-  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, and upload to the AccuKnox Dashboard
+  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, upload to AccuKnox Dashboard
 
 author: "AccuKnox"
 
@@ -24,6 +24,8 @@ inputs:
   image:
     description: >
       Container image reference (e.g. myapp:${{ github.sha }}).
+      Build with any tool (docker, podman, buildah, ko, etc.).
+      The build step must run in the same job as this action so they share the runner.
     required: false
     default: ""
 
@@ -306,9 +308,9 @@ runs:
           exit 1
         fi
 
-    # ── 6. Save artefact ──────────────────────────────────────────────────────
+    # ── 6. Save artifact ──────────────────────────────────────────────────────
     # Download: Actions tab → workflow run → Artifacts
-    - name: Save BOM artefact
+    - name: Save BOM artifact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ github.repository_owner }}-${{ inputs.bom-type }}-${{ github.run_number }}
