@@ -1,7 +1,7 @@
 name: "AccuKnox xBOM Scan"
 
 description: >
-  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, upload to AccuKnox Dashboard
+  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, and upload to the AccuKnox Dashboard
 
 author: "AccuKnox"
 
@@ -24,8 +24,6 @@ inputs:
   image:
     description: >
       Container image reference (e.g. myapp:${{ github.sha }}).
-      Build with any tool (docker, podman, buildah, ko, etc.).
-      The build step must run in the same job as this action so they share the runner.
     required: false
     default: ""
 
@@ -132,10 +130,6 @@ runs:
         echo "bom_file=${BOM_FILE}" >> "$GITHUB_OUTPUT"
 
     # ── 3a. SBOM ──────────────────────────────────────────────────────────────
-    # knoxctl pkgscan scan <source> wraps syft.
-    # Accepts a plain image tag (resolved against local runtime, then registry)
-    # or a plain filesystem path. "." is fine — the patch step rewrites the
-    # component name to the repo name.
     - name: "SBOM"
       if: inputs.bom-type == 'sbom'
       shell: bash
@@ -161,9 +155,6 @@ runs:
           --quiet
 
     # ── 3b. CBOM ──────────────────────────────────────────────────────────────
-    # knoxctl cbom source <path>  → scans Go source code
-    # knoxctl cbom image  <ref>   → scans a container image
-    # Flags: --out, --name, --format, --description, --version, --plugins, --sign, --sign-generate-key
     - name: "CBOM"
       if: inputs.bom-type == 'cbom'
       shell: bash
@@ -201,10 +192,6 @@ runs:
         fi
 
     # ── 3c. AIBOM ─────────────────────────────────────────────────────────────
-    # Two sources:
-    #   huggingface → knoxctl aibom generate --model <hf-model> --out <file>
-    #   bedrock     → knoxctl aibom bedrock --region <r> --access-key-id <k> --secret-access-key <s>
-    #                 (writes to stdout → redirected into BOM_FILE)
     - name: "AIBOM"
       if: inputs.bom-type == 'aibom'
       shell: bash
@@ -248,17 +235,9 @@ runs:
         fi
 
     # ── 4. Patch BOM JSON ─────────────────────────────────────────────────────
-    # 1. Inject project_name and project_classifier as top-level fields.
-    # 2. Replace metadata.component.name "." (raw scan target) with the repo name.
-    #
-    #   {
-    #     "$schema":            "http://cyclonedx.org/schema/bom-1.6.schema.json",
-    #     "project_name":       "<project-name>",
-    #     "project_classifier": "<classifier>",
-    #     "bomFormat":          "CycloneDX",
-    #     ...
-    #     "metadata": { "component": { "name": "<repo>", ... } }
-    #   }
+    # Two-step patch with diagnostic output:
+    #   Step A → rename metadata.component.name when it is "." (raw scan target → repo name)
+    #   Step B → inject project_name and project_classifier at top, preserving $schema
     - name: Patch BOM JSON
       shell: bash
       env:
@@ -266,21 +245,42 @@ runs:
         PROJECT:    ${{ inputs.project-name }}
         CLASSIFIER: ${{ inputs.project-classifier }}
       run: |
+        set -e
         REPO_NAME="${GITHUB_REPOSITORY##*/}"
-        echo "Patching BOM: project_name=$PROJECT, classifier=$CLASSIFIER, repo=$REPO_NAME"
+        TMP="${BOM_FILE}.tmp"
 
-        PATCHED=$(jq \
-          --arg project    "$PROJECT" \
-          --arg classifier "$CLASSIFIER" \
-          --arg repo       "$REPO_NAME" \
-          '( if has("$schema") then {"$schema": .["$schema"]} else {} end )
-           + {"project_name": $project, "project_classifier": $classifier}
-           + ( del(.["$schema"])
-               | if (.metadata.component.name? == ".")
-                 then .metadata.component.name = $repo
-                 else . end )' \
-          "$BOM_FILE")
-        echo "$PATCHED" > "$BOM_FILE"
+        echo "Patching BOM"
+        echo "  file:       $BOM_FILE"
+        echo "  project:    $PROJECT"
+        echo "  classifier: $CLASSIFIER"
+        echo "  repo:       $REPO_NAME"
+
+        echo "=== BEFORE ==="
+        jq '{root_name: .metadata.component.name}' "$BOM_FILE"
+
+        # Step A: rename "." → repo name
+        jq --arg repo "$REPO_NAME" '
+          if (.metadata.component.name? == ".") then
+            .metadata.component.name = $repo
+          else . end
+        ' "$BOM_FILE" > "$TMP"
+        mv "$TMP" "$BOM_FILE"
+
+        # Step B: inject project_name and project_classifier, keep $schema on top
+        jq --arg project "$PROJECT" --arg classifier "$CLASSIFIER" '
+          ( if has("$schema") then {"$schema": .["$schema"]} else {} end )
+          + {"project_name": $project, "project_classifier": $classifier}
+          + ( del(.["$schema"]) )
+        ' "$BOM_FILE" > "$TMP"
+        mv "$TMP" "$BOM_FILE"
+
+        echo "=== AFTER ==="
+        jq '{
+          schema:     ."$schema",
+          project:    .project_name,
+          classifier: .project_classifier,
+          root_name:  .metadata.component.name
+        }' "$BOM_FILE"
 
     # ── 5. Upload to AccuKnox SaaS ────────────────────────────────────────────
     - name: Upload to AccuKnox SaaS
@@ -308,9 +308,8 @@ runs:
           exit 1
         fi
 
-    # ── 6. Save artifact ──────────────────────────────────────────────────────
-    # Download: Actions tab → workflow run → Artifacts
-    - name: Save BOM artifact
+    # ── 6. Save artefact ──────────────────────────────────────────────────────
+    - name: Save BOM artefact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ github.repository_owner }}-${{ inputs.bom-type }}-${{ github.run_number }}
