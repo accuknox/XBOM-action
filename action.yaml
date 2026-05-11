@@ -22,8 +22,7 @@ inputs:
     default: "."
 
   image:
-    description: >
-      Container image reference (e.g. myapp:${{ github.sha }}).
+    description: "Container image reference (e.g. myapp:abc1234). Mutually exclusive with path."
     required: false
     default: ""
 
