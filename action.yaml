@@ -1,7 +1,7 @@
 name: "AccuKnox xBOM Scan"
 
 description: >
-  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, upload to AccuKnox Dashboard
+  Generate an xBOM (SBOM / CBOM / AIBOM) using knoxctl, and upload to the AccuKnox Dashboard
 
 author: "AccuKnox"
 
@@ -22,14 +22,45 @@ inputs:
     default: "."
 
   image:
-    description: "Container image to scan (e.g. myapp:latest). Mutually exclusive with path."
+    description: >
+      Container image reference (e.g. myapp:${{ github.sha }}).
     required: false
     default: ""
 
-  aibom-model:
-    description: "HuggingFace model name (e.g. meta-llama/Llama-2-7b). Required when bom-type=aibom."
+  cbom-plugins:
+    description: "Comma-separated list of CBOM plugins to run (e.g. certificates,keys). Omit to scan all."
     required: false
     default: ""
+
+  aibom-source:
+    description: "huggingface | bedrock. Source for AIBOM generation."
+    required: false
+    default: "huggingface"
+
+  aibom-model:
+    description: "HuggingFace model name (e.g. meta-llama/Llama-2-7b). Required when bom-type=aibom and aibom-source=huggingface."
+    required: false
+    default: ""
+
+  aws-region:
+    description: "AWS region for Bedrock scan (e.g. us-west-2). Required when aibom-source=bedrock."
+    required: false
+    default: ""
+
+  aws-access-key-id:
+    description: "AWS access key ID. Required when aibom-source=bedrock."
+    required: false
+    default: ""
+
+  aws-secret-access-key:
+    description: "AWS secret access key. Required when aibom-source=bedrock."
+    required: false
+    default: ""
+
+  sign:
+    description: "Sign the BOM with cosign using an ephemeral key (--sign --sign-generate-key). Supported on SBOM, CBOM, and AIBOM."
+    required: false
+    default: "false"
 
   token:
     description: "AccuKnox artifact token. https://help.accuknox.com/how-to/how-to-create-tokens/"
@@ -99,73 +130,114 @@ runs:
         echo "bom_file=${BOM_FILE}" >> "$GITHUB_OUTPUT"
 
     # ── 3a. SBOM ──────────────────────────────────────────────────────────────
-    # knoxctl pkgscan wraps syft.
-    # dir:<path>       → filesystem scan
-    # registry:<image> → pull directly from registry (no daemon needed)
     - name: "SBOM"
       if: inputs.bom-type == 'sbom'
       shell: bash
       run: |
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
-        if [ -n "${{ inputs.image }}" ]; then
-          SOURCE="registry:${{ inputs.image }}"
-        else
-          SOURCE="dir:${{ inputs.path }}"
+
+        SIGN_FLAGS=""
+        if [ "${{ inputs.sign }}" = "true" ]; then
+          SIGN_FLAGS="--sign --sign-generate-key"
+          echo "Signing enabled (ephemeral key)"
         fi
-        knoxctl pkgscan "$SOURCE" -o "cyclonedx-json=${BOM_FILE}" --quiet
+
+        if [ -n "${{ inputs.image }}" ]; then
+          SOURCE="${{ inputs.image }}"
+        else
+          SOURCE="${{ inputs.path }}"
+        fi
+
+        echo "SBOM source: $SOURCE"
+        knoxctl pkgscan scan "$SOURCE" \
+          -o "cyclonedx-json=${BOM_FILE}" \
+          $SIGN_FLAGS \
+          --quiet
 
     # ── 3b. CBOM ──────────────────────────────────────────────────────────────
-    # cbom source → scans Go source code
-    # cbom image  → scans a container image
-    # ── 3b. CBOM ──────────────────────────────────────────────────────────────
-    # knoxctl cbom source <path>  → scans Go source code
-    # knoxctl cbom image  <ref>   → scans a container image
-    # Flags: --out, --name, --format (json default), --description, --version
     - name: "CBOM"
       if: inputs.bom-type == 'cbom'
       shell: bash
       run: |
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
+
+        SIGN_FLAGS=""
+        if [ "${{ inputs.sign }}" = "true" ]; then
+          SIGN_FLAGS="--sign --sign-generate-key"
+          echo "Signing enabled (ephemeral key)"
+        fi
+
+        PLUGINS_FLAG=""
+        if [ -n "${{ inputs.cbom-plugins }}" ]; then
+          CLEAN_PLUGINS=$(echo "${{ inputs.cbom-plugins }}" | tr -d '[:space:]')
+          PLUGINS_FLAG="--plugins $CLEAN_PLUGINS"
+          echo "CBOM plugins: $CLEAN_PLUGINS"
+        fi
+
         if [ -n "${{ inputs.image }}" ]; then
           echo "CBOM scanning image: ${{ inputs.image }}"
           knoxctl cbom image \
             --image  "${{ inputs.image }}" \
             --out    "$BOM_FILE" \
-            --format json
+            --format json \
+            $PLUGINS_FLAG \
+            $SIGN_FLAGS
         else
           echo "CBOM scanning source: ${{ inputs.path }}"
           knoxctl cbom source "${{ inputs.path }}" \
             --out    "$BOM_FILE" \
-            --format json
+            --format json \
+            $PLUGINS_FLAG \
+            $SIGN_FLAGS
         fi
+
     # ── 3c. AIBOM ─────────────────────────────────────────────────────────────
-    # knoxctl aibom generate --model <hf-model> → fetches metadata from HuggingFace Hub API
-    # Flags: --model (required), --out, --format (json default)
-    # --name and --version override the values fetched from HuggingFace
     - name: "AIBOM"
       if: inputs.bom-type == 'aibom'
       shell: bash
       run: |
-        if [ -z "${{ inputs.aibom-model }}" ]; then
-          echo "::error::aibom-model is required when bom-type=aibom"
-          exit 1
+        BOM_FILE="${{ steps.names.outputs.bom_file }}"
+
+        SIGN_FLAGS=""
+        if [ "${{ inputs.sign }}" = "true" ]; then
+          SIGN_FLAGS="--sign --sign-generate-key"
+          echo "Signing enabled (ephemeral key)"
         fi
-        echo "AIBOM scanning model: ${{ inputs.aibom-model }}"
-        knoxctl aibom generate \
-          --model  "${{ inputs.aibom-model }}" \
-          --out    "${{ steps.names.outputs.bom_file }}" \
-          --format json
+
+        if [ "${{ inputs.aibom-source }}" = "bedrock" ]; then
+          if [ -z "${{ inputs.aws-region }}" ] \
+             || [ -z "${{ inputs.aws-access-key-id }}" ] \
+             || [ -z "${{ inputs.aws-secret-access-key }}" ]; then
+            echo "::error::aws-region, aws-access-key-id, and aws-secret-access-key are required when aibom-source=bedrock"
+            exit 1
+          fi
+
+          echo "AIBOM scanning AWS Bedrock in region: ${{ inputs.aws-region }}"
+          knoxctl aibom bedrock \
+            --region            "${{ inputs.aws-region }}" \
+            --access-key-id     "${{ inputs.aws-access-key-id }}" \
+            --secret-access-key "${{ inputs.aws-secret-access-key }}" \
+            $SIGN_FLAGS \
+            > "$BOM_FILE"
+
+        else
+          if [ -z "${{ inputs.aibom-model }}" ]; then
+            echo "::error::aibom-model is required when bom-type=aibom and aibom-source=huggingface"
+            exit 1
+          fi
+
+          echo "AIBOM scanning HuggingFace model: ${{ inputs.aibom-model }}"
+          knoxctl aibom generate \
+            --model  "${{ inputs.aibom-model }}" \
+            --out    "$BOM_FILE" \
+            --format json \
+            $SIGN_FLAGS
+        fi
 
     # ── 4. Patch BOM JSON ─────────────────────────────────────────────────────
-    # Injects project_name and project_classifier as top-level fields:
-    #
-    #   {
-    #     "$schema":            "http://cyclonedx.org/schema/bom-1.6.schema.json",
-    #     "project_name":       "<project-name>",
-    #     "project_classifier": "<classifier>",
-    #     "bomFormat":          "CycloneDX",
-    #     ...
-    #   }
+    # Two-step patch with diagnostic output:
+    #   Step A → rename metadata.component.name when it is "." (raw scan target → repo name)
+    #   Step B → inject project_name and project_classifier at top, preserving $schema
     - name: Patch BOM JSON
       shell: bash
       env:
@@ -173,14 +245,42 @@ runs:
         PROJECT:    ${{ inputs.project-name }}
         CLASSIFIER: ${{ inputs.project-classifier }}
       run: |
-        PATCHED=$(jq \
-          --arg project    "$PROJECT" \
-          --arg classifier "$CLASSIFIER" \
-          '( if has("$schema") then {"$schema": .["$schema"]} else {} end )
-           + {"project_name": $project, "project_classifier": $classifier}
-           + ( del(.["$schema"]) )' \
-          "$BOM_FILE")
-        echo "$PATCHED" > "$BOM_FILE"
+        set -e
+        REPO_NAME="${GITHUB_REPOSITORY##*/}"
+        TMP="${BOM_FILE}.tmp"
+
+        echo "Patching BOM"
+        echo "  file:       $BOM_FILE"
+        echo "  project:    $PROJECT"
+        echo "  classifier: $CLASSIFIER"
+        echo "  repo:       $REPO_NAME"
+
+        echo "=== BEFORE ==="
+        jq '{root_name: .metadata.component.name}' "$BOM_FILE"
+
+        # Step A: rename "." → repo name
+        jq --arg repo "$REPO_NAME" '
+          if (.metadata.component.name? == ".") then
+            .metadata.component.name = $repo
+          else . end
+        ' "$BOM_FILE" > "$TMP"
+        mv "$TMP" "$BOM_FILE"
+
+        # Step B: inject project_name and project_classifier, keep $schema on top
+        jq --arg project "$PROJECT" --arg classifier "$CLASSIFIER" '
+          ( if has("$schema") then {"$schema": .["$schema"]} else {} end )
+          + {"project_name": $project, "project_classifier": $classifier}
+          + ( del(.["$schema"]) )
+        ' "$BOM_FILE" > "$TMP"
+        mv "$TMP" "$BOM_FILE"
+
+        echo "=== AFTER ==="
+        jq '{
+          schema:     ."$schema",
+          project:    .project_name,
+          classifier: .project_classifier,
+          root_name:  .metadata.component.name
+        }' "$BOM_FILE"
 
     # ── 5. Upload to AccuKnox SaaS ────────────────────────────────────────────
     - name: Upload to AccuKnox SaaS
@@ -208,9 +308,8 @@ runs:
           exit 1
         fi
 
-    # ── 6. Save artifact ──────────────────────────────────────────────────────
-    # Download: Actions tab → workflow run → Artifacts
-    - name: Save BOM artifact
+    # ── 6. Save artefact ──────────────────────────────────────────────────────
+    - name: Save BOM artefact
       uses: actions/upload-artifact@v4
       with:
         name: ${{ github.repository_owner }}-${{ inputs.bom-type }}-${{ github.run_number }}
