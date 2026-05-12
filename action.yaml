@@ -22,7 +22,7 @@ inputs:
     default: "."
 
   image:
-    description: "Container image reference (e.g. myapp:abc1234). Mutually exclusive with path."
+    description: "Container image reference (e.g. myapp:abc1234). Build with any tool (docker, podman, buildah, ko). The build step must run in the same job as this action."
     required: false
     default: ""
 
@@ -42,7 +42,7 @@ inputs:
     default: ""
 
   aws-region:
-    description: "AWS region for Bedrock scan (e.g. us-west-2). Required when aibom-source=bedrock."
+    description: "AWS region for Bedrock scan (e.g. us-east-1). Required when aibom-source=bedrock."
     required: false
     default: ""
 
@@ -100,10 +100,40 @@ runs:
   using: "composite"
   steps:
 
+    # ── 0. Validate inputs ────────────────────────────────────────────────────
+    - name: Validate inputs
+      shell: bash
+      run: |
+        set -e
+
+        case "${{ inputs.bom-type }}" in
+          sbom|cbom|aibom) ;;
+          *) echo "::error::bom-type must be sbom, cbom, or aibom (got '${{ inputs.bom-type }}')"; exit 1 ;;
+        esac
+
+        case "${{ inputs.sign }}" in
+          true|false) ;;
+          *) echo "::error::sign must be 'true' or 'false' (got '${{ inputs.sign }}')"; exit 1 ;;
+        esac
+
+        if [ "${{ inputs.bom-type }}" = "aibom" ]; then
+          case "${{ inputs.aibom-source }}" in
+            huggingface|bedrock) ;;
+            *) echo "::error::aibom-source must be 'huggingface' or 'bedrock' (got '${{ inputs.aibom-source }}')"; exit 1 ;;
+          esac
+        fi
+
+        if [ -n "${{ inputs.image }}" ] && [ "${{ inputs.path }}" != "." ]; then
+          echo "::warning::Both image and a non-default path were provided. image takes precedence; path is ignored."
+        fi
+
+        echo "Inputs validated."
+
     # ── 1. Download knoxctl ───────────────────────────────────────────────────
     - name: Download knoxctl
       shell: bash
       run: |
+        set -e
         BIN_DIR="$RUNNER_TEMP/knoxctl-bin"
         mkdir -p "$BIN_DIR"
         curl -fL \
@@ -120,6 +150,7 @@ runs:
       id: names
       shell: bash
       run: |
+        set -e
         if [ -n "${{ inputs.output-file }}" ]; then
           BOM_FILE="${{ inputs.output-file }}"
         else
@@ -133,6 +164,7 @@ runs:
       if: inputs.bom-type == 'sbom'
       shell: bash
       run: |
+        set -e
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
 
         SIGN_FLAGS=""
@@ -158,6 +190,7 @@ runs:
       if: inputs.bom-type == 'cbom'
       shell: bash
       run: |
+        set -e
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
 
         SIGN_FLAGS=""
@@ -195,6 +228,7 @@ runs:
       if: inputs.bom-type == 'aibom'
       shell: bash
       run: |
+        set -e
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
 
         SIGN_FLAGS=""
@@ -216,8 +250,9 @@ runs:
             --region            "${{ inputs.aws-region }}" \
             --access-key-id     "${{ inputs.aws-access-key-id }}" \
             --secret-access-key "${{ inputs.aws-secret-access-key }}" \
-            $SIGN_FLAGS \
-            > "$BOM_FILE"
+            --out               "$BOM_FILE" \
+            --format            json \
+            $SIGN_FLAGS
 
         else
           if [ -z "${{ inputs.aibom-model }}" ]; then
@@ -233,10 +268,33 @@ runs:
             $SIGN_FLAGS
         fi
 
-    # ── 4. Patch BOM JSON ─────────────────────────────────────────────────────
-    # Two-step patch with diagnostic output:
-    #   Step A → rename metadata.component.name when it is "." (raw scan target → repo name)
-    #   Step B → inject project_name and project_classifier at top, preserving $schema
+    # ── 4. Validate BOM file ──────────────────────────────────────────────────
+    - name: Validate BOM file
+      shell: bash
+      env:
+        BOM_FILE: ${{ steps.names.outputs.bom_file }}
+      run: |
+        set -e
+        if [ ! -f "$BOM_FILE" ]; then
+          echo "::error::BOM file not found at $BOM_FILE — scan did not write output"
+          exit 1
+        fi
+        SIZE=$(stat -c%s "$BOM_FILE")
+        if [ "$SIZE" -lt 50 ]; then
+          echo "::error::BOM file is suspiciously small ($SIZE bytes)"
+          head -c 500 "$BOM_FILE" || true
+          exit 1
+        fi
+        if ! jq empty "$BOM_FILE" 2>/dev/null; then
+          echo "::error::BOM file is not valid JSON. First 500 bytes:"
+          head -c 500 "$BOM_FILE" || true
+          exit 1
+        fi
+        echo "BOM file OK ($SIZE bytes, valid JSON)"
+
+    # ── 5. Patch BOM JSON ─────────────────────────────────────────────────────
+    # Step A → rename metadata.component.name when it is "." (raw scan target → repo name)
+    # Step B → inject project_name and project_classifier at top, preserving $schema
     - name: Patch BOM JSON
       shell: bash
       env:
@@ -257,7 +315,6 @@ runs:
         echo "=== BEFORE ==="
         jq '{root_name: .metadata.component.name}' "$BOM_FILE"
 
-        # Step A: rename "." → repo name
         jq --arg repo "$REPO_NAME" '
           if (.metadata.component.name? == ".") then
             .metadata.component.name = $repo
@@ -265,7 +322,6 @@ runs:
         ' "$BOM_FILE" > "$TMP"
         mv "$TMP" "$BOM_FILE"
 
-        # Step B: inject project_name and project_classifier, keep $schema on top
         jq --arg project "$PROJECT" --arg classifier "$CLASSIFIER" '
           ( if has("$schema") then {"$schema": .["$schema"]} else {} end )
           + {"project_name": $project, "project_classifier": $classifier}
@@ -281,16 +337,17 @@ runs:
           root_name:  .metadata.component.name
         }' "$BOM_FILE"
 
-    # ── 5. Upload to AccuKnox SaaS ────────────────────────────────────────────
+    # ── 6. Upload to AccuKnox SaaS ────────────────────────────────────────────
     - name: Upload to AccuKnox SaaS
       id: upload-saas
       shell: bash
       env:
-        AK_TOKEN:     ${{ inputs.token }}
-        AK_ENDPOINT:  ${{ inputs.endpoint }}
-        AK_LABEL:     ${{ inputs.label }}
-        BOM_FILE:     ${{ steps.names.outputs.bom_file }}
+        AK_TOKEN:    ${{ inputs.token }}
+        AK_ENDPOINT: ${{ inputs.endpoint }}
+        AK_LABEL:    ${{ inputs.label }}
+        BOM_FILE:    ${{ steps.names.outputs.bom_file }}
       run: |
+        set -e
         HTTP_STATUS=$(curl --location \
           "https://${AK_ENDPOINT}/api/v1/artifact/?data_type=SBOM&save_to_s3=True&label_id=${AK_LABEL}" \
           --header "Authorization: Bearer ${AK_TOKEN}" \
@@ -301,13 +358,14 @@ runs:
 
         echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
         cat /tmp/ak_response.json
+        echo
 
         if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
           echo "::error::Upload failed (HTTP ${HTTP_STATUS})"
           exit 1
         fi
 
-    # ── 6. Save artefact ──────────────────────────────────────────────────────
+    # ── 7. Save BOM artefact ──────────────────────────────────────────────────
     - name: Save BOM artefact
       uses: actions/upload-artifact@v4
       with:
