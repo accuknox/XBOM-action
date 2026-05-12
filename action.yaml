@@ -26,11 +26,6 @@ inputs:
     required: false
     default: ""
 
-  cbom-plugins:
-    description: "Comma-separated list of CBOM plugins to run (e.g. certificates,keys). Omit to scan all."
-    required: false
-    default: ""
-
   aibom-source:
     description: "huggingface | bedrock. Source for AIBOM generation."
     required: false
@@ -199,27 +194,18 @@ runs:
           echo "Signing enabled (ephemeral key)"
         fi
 
-        PLUGINS_FLAG=""
-        if [ -n "${{ inputs.cbom-plugins }}" ]; then
-          CLEAN_PLUGINS=$(echo "${{ inputs.cbom-plugins }}" | tr -d '[:space:]')
-          PLUGINS_FLAG="--plugins $CLEAN_PLUGINS"
-          echo "CBOM plugins: $CLEAN_PLUGINS"
-        fi
-
         if [ -n "${{ inputs.image }}" ]; then
           echo "CBOM scanning image: ${{ inputs.image }}"
           knoxctl cbom image \
             --image  "${{ inputs.image }}" \
             --out    "$BOM_FILE" \
             --format json \
-            $PLUGINS_FLAG \
             $SIGN_FLAGS
         else
           echo "CBOM scanning source: ${{ inputs.path }}"
           knoxctl cbom source "${{ inputs.path }}" \
             --out    "$BOM_FILE" \
             --format json \
-            $PLUGINS_FLAG \
             $SIGN_FLAGS
         fi
 
