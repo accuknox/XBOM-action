@@ -4,7 +4,7 @@
 
 # AccuKnox xBOM Scan Action
 
-**Generate, upload, and store Bills of Materials directly from your CI/CD pipeline**
+**Generate, upload, and store Bills of Materials directly from your CI/CD pipeline.**
 
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-AccuKnox%20xBOM%20Scan-blue?logo=github)](https://github.com/marketplace/actions/accuknox-xbom-scan)
 [![knoxctl](https://img.shields.io/badge/powered%20by-knoxctl%20v0.10.0-orange)](https://github.com/accuknox/accuknox-cli-v2)
@@ -16,12 +16,12 @@
 
 ## Overview
 
-The **AccuKnox xBOM Scan Action** integrates seamlessly into your GitHub workflow to:
+The **AccuKnox xBOM Scan Action** integrates into your GitHub workflow to:
 
-- 🔍 **Scan** your source code, Go projects, or AI/ML models
-- 📦 **Generate** CycloneDX-compliant BOMs (SBOM, CBOM, AIBOM)
-- ☁️ **Upload** results directly to AccuKnox SaaS
-- 💾 **Save** the BOM as a downloadable GitHub Actions artifact
+- 🔍 **Scan** source code, container images, Go projects, or AI/ML models
+- 📦 **Generate** CycloneDX 1.6 BOMs (SBOM, CBOM, AIBOM)
+- ☁️ **Upload** results to AccuKnox SaaS
+- 💾 **Save** the BOM as a downloadable GitHub Actions artefact
 
 ---
 
@@ -29,47 +29,59 @@ The **AccuKnox xBOM Scan Action** integrates seamlessly into your GitHub workflo
 
 | Type | Tool | Source | Use Case |
 |---|---|---|---|
-| `sbom` | `knoxctl pkgscan` | Filesystem | Packages, libraries, dependencies |
+| `sbom` | `knoxctl pkgscan` | Filesystem or container image | Packages, libraries, dependencies |
 | `cbom` | `knoxctl cbom` | Go source or container image | Crypto algorithms, certs, protocols |
-| `aibom` | `knoxctl aibom` | HuggingFace model | AI/ML model inventory |
+| `aibom` | `knoxctl aibom` | HuggingFace model or AWS Bedrock | AI/ML model inventory |
 
 ---
 
 ## Setup
 
-Add the following to your repository under **Settings → Secrets and variables → Actions**:
+Add the following under **Settings → Secrets and variables → Actions**.
+
+### Required (all BOM types)
 
 | Secret | Description |
 |---|---|
-| `ACCUKNOX_TOKEN` | AccuKnox API token → [How to create](https://help.accuknox.com/how-to/how-to-create-tokens/) |
+| `ACCUKNOX_TOKEN` | AccuKnox API token. [How to create](https://help.accuknox.com/how-to/how-to-create-tokens/) |
 | `ACCUKNOX_ENDPOINT` | AccuKnox endpoint, e.g. `cspm.accuknox.com` |
-| `ACCUKNOX_LABEL` | AccuKnox label → [How to create](https://help.accuknox.com/how-to/how-to-create-labels/) |
+| `ACCUKNOX_LABEL` | AccuKnox label. [How to create](https://help.accuknox.com/how-to/how-to-create-labels/) |
+
+### Required for AIBOM Bedrock only
+
+| Secret | Description |
+|---|---|
+| `AWS_ACCESS_KEY_ID` | AWS access key with `bedrock:ListFoundationModels` permission |
+| `AWS_SECRET_ACCESS_KEY` | Matching AWS secret access key |
+
+### Create a Project in AccuKnox Console
+
+To associate uploaded BOMs with the correct entity, create a Project in the AccuKnox Console before running the workflow.
+
+1. Log in to the AccuKnox Dashboard
+2. Navigate to **SBOM → Projects**
+3. Click **New Project**
+4. Fill in the required details:
+   - **Name** (required): used as `project-name` in the workflow
+   - **Description**: short description of the project
+   - **Classifier** (required): must match the `project-classifier` input. 
+   - **Tags** (optional): any tags you want to attach
+5. Click **Create**
+
+> 📌 The Project Name and Project Classifier must exactly match the value passed to `project-name` and `project-classifier`in the workflow YAML.
 
 ---
-
-## Inputs
-
-| Input | Required | Default | Description |
-|---|---|---|---|
-| `bom-type` | **Yes** | `sbom` | `sbom` / `cbom` / `aibom` |
-| `path` | No | `.` | Directory to scan |
-| `image` | No | — | Container image to scan (`cbom` only) |
-| `aibom-model` | No | — | HuggingFace model ID (`aibom` only) |
-| `cbom-plugins` | No | — | Comma-separated plugins for `cbom image` scan, e.g. `certificates,keys` |
-| `token` | **Yes** | — | AccuKnox API token |
-| `endpoint` | **Yes** | — | AccuKnox SaaS hostname |
-| `label` | **Yes** | — | AccuKnox label name |
 
 ---
 
 ## Usage
 
-### 📦 SBOM — Filesystem
+### 📦 SBOM from Filesystem
 
 > Scans the repository source tree for packages and dependencies.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           sbom
     path:               "."
@@ -77,17 +89,66 @@ Add the following to your repository under **Settings → Secrets and variables 
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:              ${{ secrets.ACCUKNOX_LABEL }}
     project-name:       my-project
-    project-classifier: container
+    project-classifier: application
 ```
+
+#### Inputs
+
+| Name | Description | Possible Options | Required |
+|---|---|---|---|
+| `bom-type` | Type of BOM to generate | `sbom` | **Yes** |
+| `path` | Directory to scan | Any valid directory path | No (default: `.`) |
+| `token` | AccuKnox API token | Token from AccuKnox console | **Yes** |
+| `endpoint` | AccuKnox SaaS hostname | Hostname only, no `https://` | **Yes** |
+| `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
+| `project-name` | AccuKnox project name | Any string | **Yes** |
+| `project-classifier` | CycloneDX classifier | `application`, `firmware`, `library` | **Yes** |
 
 ---
 
-### 🔐 CBOM — Go Source Code
+### 🐳 SBOM from Container Image
 
-> Scans Go source code for cryptographic algorithms, protocols, and certificates.
+> Scans a built container image for installed packages. Build the image in the same job; the action only needs the tag.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- name: Build image
+  id: build
+  run: |
+    IMAGE="myapp:${{ github.sha }}"
+    docker build -t "$IMAGE" .
+    echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+
+- uses: accuknox/xbom-action@2.0
+  with:
+    bom-type:           sbom
+    image:              ${{ steps.build.outputs.image }}
+    token:              ${{ secrets.ACCUKNOX_TOKEN }}
+    endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
+    label:              ${{ secrets.ACCUKNOX_LABEL }}
+    project-name:       my-project
+    project-classifier: container
+```
+
+#### Inputs
+
+| Name | Description | Possible Options | Required |
+|---|---|---|---|
+| `bom-type` | Type of BOM to generate | `sbom` | **Yes** |
+| `image` | Container image reference. Build with any tool (docker, podman, buildah, ko). Build step must run in the same job. | Image tag, e.g. `myapp:abc1234` | **Yes** |
+| `token` | AccuKnox API token | Token from AccuKnox console | **Yes** |
+| `endpoint` | AccuKnox SaaS hostname | Hostname only, no `https://` | **Yes** |
+| `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
+| `project-name` | AccuKnox project name | Any string | **Yes** |
+| `project-classifier` | CycloneDX classifier | `container` | **Yes** |
+
+---
+
+### 🔐 CBOM from Go Source Code
+
+> Scans Go source for cryptographic algorithms, protocols, and certificates.
+
+```yaml
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           cbom
     path:               "."
@@ -98,28 +159,38 @@ Add the following to your repository under **Settings → Secrets and variables 
     project-classifier: application
 ```
 
+#### Inputs
+
+| Name | Description | Possible Options | Required |
+|---|---|---|---|
+| `bom-type` | Type of BOM to generate | `cbom` | **Yes** |
+| `path` | Directory containing Go source | Any valid directory path | No (default: `.`) |
+| `token` | AccuKnox API token | Token from AccuKnox console | **Yes** |
+| `endpoint` | AccuKnox SaaS hostname | Hostname only, no `https://` | **Yes** |
+| `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
+| `project-name` | AccuKnox project name | Any string | **Yes** |
+| `project-classifier` | CycloneDX classifier | `application`, `library` | **Yes** |
+
 ---
 
-### 🐳 CBOM — Container Image
+### 🐳 CBOM from Container Image
 
 > Scans a container image for cryptographic algorithms, protocols, and certificates.
 >
-> ⚠️ The build step and scan action **must be in the same job** to share the same runner. The action only needs the final image reference — build it any way you want (`docker`, `podman`, `buildah`, `ko`, etc.).
+> ⚠️ The build step and scan action must be in the same job to share the runner. The action only needs the final image reference. Build with any tool: docker, podman, buildah, ko, etc.
 
 ```yaml
-# Build your image however you want — just expose the tag as a step output
 - name: Build image
   id: build
   run: |
     IMAGE="myapp:${{ github.sha }}"
-    docker build -t "$IMAGE" .          # replace with your build tool
+    docker build -t "$IMAGE" .
     echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           cbom
     image:              ${{ steps.build.outputs.image }}
-    cbom-plugins:       certificates, keys    # optional — omit to scan all
     token:              ${{ secrets.ACCUKNOX_TOKEN }}
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:              ${{ secrets.ACCUKNOX_LABEL }}
@@ -127,16 +198,29 @@ Add the following to your repository under **Settings → Secrets and variables 
     project-classifier: container
 ```
 
+#### Inputs
+
+| Name | Description | Possible Options | Required |
+|---|---|---|---|
+| `bom-type` | Type of BOM to generate | `cbom` | **Yes** |
+| `image` | Container image reference. Build step must run in the same job. | Image tag, e.g. `myapp:abc1234` | **Yes** |
+| `token` | AccuKnox API token | Token from AccuKnox console | **Yes** |
+| `endpoint` | AccuKnox SaaS hostname | Hostname only, no `https://` | **Yes** |
+| `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
+| `project-name` | AccuKnox project name | Any string | **Yes** |
+| `project-classifier` | CycloneDX classifier | `container` | **Yes** |
+
 ---
 
-### 🤖 AIBOM — HuggingFace Model
+### 🤖 AIBOM from HuggingFace Model
 
-> Inventories AI/ML model components by fetching metadata from the HuggingFace Hub API.
+> Inventories an AI/ML model by fetching metadata from the HuggingFace Hub API.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           aibom
+    aibom-source:       huggingface
     aibom-model:        google-bert/bert-base-uncased
     token:              ${{ secrets.ACCUKNOX_TOKEN }}
     endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
@@ -144,6 +228,55 @@ Add the following to your repository under **Settings → Secrets and variables 
     project-name:       my-project
     project-classifier: machine-learning-model
 ```
+
+#### Inputs
+
+| Name | Description | Possible Options | Required |
+|---|---|---|---|
+| `bom-type` | Type of BOM to generate | `aibom` | **Yes** |
+| `aibom-source` | AIBOM data source | `huggingface` | No (default: `huggingface`) |
+| `aibom-model` | HuggingFace model ID | e.g. `google-bert/bert-base-uncased`, `meta-llama/Llama-2-7b` | **Yes** |
+| `token` | AccuKnox API token | Token from AccuKnox console | **Yes** |
+| `endpoint` | AccuKnox SaaS hostname | Hostname only, no `https://` | **Yes** |
+| `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
+| `project-name` | AccuKnox project name | Any string | **Yes** |
+| `project-classifier` | CycloneDX classifier | `machine-learning-model` | **Yes** |
+
+---
+
+### 🤖 AIBOM from AWS Bedrock
+
+> Inventories all foundation models accessible in your AWS Bedrock account for the given region. Requires AWS credentials with `bedrock:ListFoundationModels` permission.
+
+```yaml
+- uses: accuknox/xbom-action@2.0
+  with:
+    bom-type:              aibom
+    aibom-source:          bedrock
+    aws-region:            us-east-1
+    aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+    aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    token:                 ${{ secrets.ACCUKNOX_TOKEN }}
+    endpoint:              ${{ secrets.ACCUKNOX_ENDPOINT }}
+    label:                 ${{ secrets.ACCUKNOX_LABEL }}
+    project-name:          my-project
+    project-classifier:    application
+```
+
+#### Inputs
+
+| Name | Description | Possible Options | Required |
+|---|---|---|---|
+| `bom-type` | Type of BOM to generate | `aibom` | **Yes** |
+| `aibom-source` | AIBOM data source | `bedrock` | **Yes** |
+| `aws-region` | AWS region for Bedrock scan | AWS region code, e.g. `us-east-1`, `us-west-2`, `eu-central-1` | **Yes** |
+| `aws-access-key-id` | AWS access key ID with `bedrock:ListFoundationModels` permission | AWS access key string | **Yes** |
+| `aws-secret-access-key` | AWS secret access key | AWS secret key string | **Yes** |
+| `token` | AccuKnox API token | Token from AccuKnox console | **Yes** |
+| `endpoint` | AccuKnox SaaS hostname | Hostname only, no `https://` | **Yes** |
+| `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
+| `project-name` | AccuKnox project name | Any string | **Yes** |
+| `project-classifier` | CycloneDX classifier | `machine-learning-model` | **Yes** |
 
 ---
 
@@ -163,9 +296,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: accuknox/xbom-action@1.0
+      - uses: accuknox/xbom-action@2.0
         with:
           bom-type:           sbom
           path:               "."
@@ -173,7 +306,7 @@ jobs:
           endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
           label:              ${{ secrets.ACCUKNOX_LABEL }}
           project-name:       my-project
-          project-classifier: container
+          project-classifier: application
 ```
 
 ---
@@ -191,28 +324,31 @@ After the workflow runs, the generated BOM is saved as a GitHub Actions artefact
 ---
 
 ## Publishing BOM to GitHub Releases
-
-To attach the BOM as a GitHub Release asset, use the `anchore/sbom-action/publish-sbom` sub-action. It automatically picks up all matching artifacts from the workflow run and attaches them to the release.
-
+ 
+To attach the BOM as a GitHub Release asset, trigger the workflow on `release: published` and use `softprops/action-gh-release` to attach the generated BOM.
+ 
+> ⚠️ The job requires explicit permissions and must be triggered by a release event.
+ 
 ```yaml
-- uses: anchore/sbom-action/publish-sbom@v0
-  with:
-    sbom-artifact-match: ".*\\.json$"
-```
-
-> ⚠️ **The job requires explicit permissions:**
-
-```yaml
+name: AccuKnox xBOM Scan
+ 
+on:
+  release:
+    types: [published]
+ 
 jobs:
-  xbom-scan:
+  xbom-publish:
+    runs-on: ubuntu-latest
     permissions:
       actions:  read
       contents: write
-
+ 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: accuknox/xbom-action@1.0
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+ 
+      - name: Run AccuKnox xBOM Scan
+        uses: accuknox/xbom-action@2.0
         with:
           bom-type:           sbom
           path:               "."
@@ -220,10 +356,27 @@ jobs:
           endpoint:           ${{ secrets.ACCUKNOX_ENDPOINT }}
           label:              ${{ secrets.ACCUKNOX_LABEL }}
           project-name:       my-project
-          project-classifier: container
-
-      - uses: anchore/sbom-action/publish-sbom@v0
+          project-classifier: application
+ 
+      - name: Download Workflow Artifacts
+        uses: actions/download-artifact@v4
         with:
-          sbom-artifact-match: ".*\\.json$"
+          path: artifacts
+ 
+      - name: Upload SBOM to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.json
 ```
----
+ 
+### How it works
+ 
+1. The action generates and uploads the BOM and saves it as a workflow artefact
+2. `actions/download-artifact@v4` pulls all workflow artefacts into `artefacts/`
+3. `softprops/action-gh-release@v2` attaches every `*.json` file under `artefacts/` to the release that triggered the workflow
+### Creating a release to trigger the workflow
+ 
+1. Push the workflow file to your default branch (`main` or `master`)
+2. Go to **Releases → Draft a new release**
+3. Pick a tag, fill in the title, and click **Publish release**
+4. The workflow runs automatically; the BOM appears under **Assets** on the release page when it finishes
