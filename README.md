@@ -324,28 +324,31 @@ After the workflow runs, the generated BOM is saved as a GitHub Actions artefact
 ---
 
 ## Publishing BOM to GitHub Releases
-
-To attach the BOM as a GitHub Release asset, use the `anchore/sbom-action/publish-sbom` sub-action. It picks up matching artefacts from the workflow run and attaches them to the release.
-
+ 
+To attach the BOM as a GitHub Release asset, trigger the workflow on `release: published` and use `softprops/action-gh-release` to attach the generated BOM.
+ 
+> ⚠️ The job requires explicit permissions and must be triggered by a release event.
+ 
 ```yaml
-- uses: anchore/sbom-action/publish-sbom@v0
-  with:
-    sbom-artifact-match: ".*\\.json$"
-```
-
-> ⚠️ The job requires explicit permissions:
-
-```yaml
+name: AccuKnox xBOM Scan
+ 
+on:
+  release:
+    types: [published]
+ 
 jobs:
-  xbom-scan:
+  xbom-publish:
+    runs-on: ubuntu-latest
     permissions:
       actions:  read
       contents: write
-
+ 
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: accuknox/xbom-action@2.0
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+ 
+      - name: Run AccuKnox xBOM Scan
+        uses: accuknox/xbom-action@2.0
         with:
           bom-type:           sbom
           path:               "."
@@ -354,8 +357,26 @@ jobs:
           label:              ${{ secrets.ACCUKNOX_LABEL }}
           project-name:       my-project
           project-classifier: application
-
-      - uses: anchore/sbom-action/publish-sbom@v0
+ 
+      - name: Download Workflow Artifacts
+        uses: actions/download-artifact@v4
         with:
-          sbom-artifact-match: ".*\\.json$"
+          path: artifacts
+ 
+      - name: Upload SBOM to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.json
 ```
+ 
+### How it works
+ 
+1. The action generates and uploads the BOM and saves it as a workflow artefact
+2. `actions/download-artifact@v4` pulls all workflow artefacts into `artefacts/`
+3. `softprops/action-gh-release@v2` attaches every `*.json` file under `artefacts/` to the release that triggered the workflow
+### Creating a release to trigger the workflow
+ 
+1. Push the workflow file to your default branch (`main` or `master`)
+2. Go to **Releases → Draft a new release**
+3. Pick a tag, fill in the title, and click **Publish release**
+4. The workflow runs automatically; the BOM appears under **Assets** on the release page when it finishes
