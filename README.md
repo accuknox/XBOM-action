@@ -54,6 +54,24 @@ Add the following under **Settings → Secrets and variables → Actions**.
 | `AWS_ACCESS_KEY_ID` | AWS access key with `bedrock:ListFoundationModels` permission |
 | `AWS_SECRET_ACCESS_KEY` | Matching AWS secret access key |
 
+### Create a Project in AccuKnox Console (Required for SBOM)
+
+> ⚠️ This step is required if you plan to generate SBOMs using `bom-type: sbom`.
+
+To associate SBOM data with the correct entity, create a Project in the AccuKnox Console.
+
+1. Log in to the **AccuKnox Dashboard**
+2. Navigate to **SBOM → Projects**
+3. Click **New Project**
+4. Fill in the required details:
+   - **Name** (required): Project name. Used as `project-name` in the workflow.
+   - **Description**: Short description of the project
+   - **Classifier** (required): Select **Container**
+   - **Tags**: (optional) Add relevant tags
+5. Click **Create**
+
+> 📌 The Project Name must exactly match the value provided in the GitHub workflow under `project-name`.
+
 ---
 
 ## Outputs
