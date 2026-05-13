@@ -54,32 +54,23 @@ Add the following under **Settings → Secrets and variables → Actions**.
 | `AWS_ACCESS_KEY_ID` | AWS access key with `bedrock:ListFoundationModels` permission |
 | `AWS_SECRET_ACCESS_KEY` | Matching AWS secret access key |
 
-### Create a Project in AccuKnox Console (Required for SBOM)
+### Create a Project in AccuKnox Console
 
-> ⚠️ This step is required if you plan to generate SBOMs using `bom-type: sbom`.
+To associate uploaded BOMs with the correct entity, create a Project in the AccuKnox Console before running the workflow.
 
-To associate SBOM data with the correct entity, create a Project in the AccuKnox Console.
-
-1. Log in to the **AccuKnox Dashboard**
+1. Log in to the AccuKnox Dashboard
 2. Navigate to **SBOM → Projects**
 3. Click **New Project**
 4. Fill in the required details:
-   - **Name** (required): Project name. Used as `project-name` in the workflow.
-   - **Description**: Short description of the project
-   - **Classifier** (required): Select **Container**
-   - **Tags**: (optional) Add relevant tags
+   - **Name** (required): used as `project-name` in the workflow
+   - **Description**: short description of the project
+   - **Classifier** (required): must match the `project-classifier` input. 
+   - **Tags** (optional): any tags you want to attach
 5. Click **Create**
 
-> 📌 The Project Name must exactly match the value provided in the GitHub workflow under `project-name`.
+> 📌 The Project Name and Project Classifier must exactly match the value passed to `project-name` and `project-classifier`in the workflow YAML.
 
 ---
-
-## Outputs
-
-| Output | Description |
-|---|---|
-| `bom-file` | Absolute path to the generated BOM file on the runner |
-| `upload-status` | HTTP status code from the AccuKnox SaaS upload |
 
 ---
 
@@ -112,7 +103,6 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
 | `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
 | `project-name` | AccuKnox project name | Any string | **Yes** |
 | `project-classifier` | CycloneDX classifier | `application`, `firmware`, `library` | **Yes** |
-| `output-file` | Local BOM file path | File path | No (auto: `<repo>-sbom.json`) |
 
 ---
 
@@ -150,7 +140,6 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
 | `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
 | `project-name` | AccuKnox project name | Any string | **Yes** |
 | `project-classifier` | CycloneDX classifier | `container` | **Yes** |
-| `output-file` | Local BOM file path | File path | No (auto: `<repo>-sbom.json`) |
 
 ---
 
@@ -181,7 +170,6 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
 | `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
 | `project-name` | AccuKnox project name | Any string | **Yes** |
 | `project-classifier` | CycloneDX classifier | `application`, `library` | **Yes** |
-| `output-file` | Local BOM file path | File path | No (auto: `<repo>-cbom.json`) |
 
 ---
 
@@ -221,7 +209,6 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
 | `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
 | `project-name` | AccuKnox project name | Any string | **Yes** |
 | `project-classifier` | CycloneDX classifier | `container` | **Yes** |
-| `output-file` | Local BOM file path | File path | No (auto: `<repo>-cbom.json`) |
 
 ---
 
@@ -254,7 +241,6 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
 | `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
 | `project-name` | AccuKnox project name | Any string | **Yes** |
 | `project-classifier` | CycloneDX classifier | `machine-learning-model` | **Yes** |
-| `output-file` | Local BOM file path | File path | No (auto: `<repo>-aibom.json`) |
 
 ---
 
@@ -274,7 +260,7 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
     endpoint:              ${{ secrets.ACCUKNOX_ENDPOINT }}
     label:                 ${{ secrets.ACCUKNOX_LABEL }}
     project-name:          my-project
-    project-classifier:    machine-learning-model
+    project-classifier:    application
 ```
 
 #### Inputs
@@ -291,7 +277,6 @@ To associate SBOM data with the correct entity, create a Project in the AccuKnox
 | `label` | AccuKnox label | Label from AccuKnox console | **Yes** |
 | `project-name` | AccuKnox project name | Any string | **Yes** |
 | `project-classifier` | CycloneDX classifier | `machine-learning-model` | **Yes** |
-| `output-file` | Local BOM file path | File path | No (auto: `<repo>-aibom.json`) |
 
 ---
 
