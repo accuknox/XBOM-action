@@ -51,11 +51,6 @@ inputs:
     required: false
     default: ""
 
-  sign:
-    description: "Sign the BOM with cosign using an ephemeral key (--sign --sign-generate-key). Supported on SBOM, CBOM, and AIBOM."
-    required: false
-    default: "false"
-
   token:
     description: "AccuKnox artifact token. https://help.accuknox.com/how-to/how-to-create-tokens/"
     required: true
@@ -104,11 +99,6 @@ runs:
         case "${{ inputs.bom-type }}" in
           sbom|cbom|aibom) ;;
           *) echo "::error::bom-type must be sbom, cbom, or aibom (got '${{ inputs.bom-type }}')"; exit 1 ;;
-        esac
-
-        case "${{ inputs.sign }}" in
-          true|false) ;;
-          *) echo "::error::sign must be 'true' or 'false' (got '${{ inputs.sign }}')"; exit 1 ;;
         esac
 
         if [ "${{ inputs.bom-type }}" = "aibom" ]; then
@@ -162,12 +152,6 @@ runs:
         set -e
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
 
-        SIGN_FLAGS=""
-        if [ "${{ inputs.sign }}" = "true" ]; then
-          SIGN_FLAGS="--sign --sign-generate-key"
-          echo "Signing enabled (ephemeral key)"
-        fi
-
         if [ -n "${{ inputs.image }}" ]; then
           SOURCE="${{ inputs.image }}"
         else
@@ -177,7 +161,6 @@ runs:
         echo "SBOM source: $SOURCE"
         knoxctl pkgscan scan "$SOURCE" \
           -o "cyclonedx-json=${BOM_FILE}" \
-          $SIGN_FLAGS \
           --quiet
 
     # ── 3b. CBOM ──────────────────────────────────────────────────────────────
@@ -188,25 +171,17 @@ runs:
         set -e
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
 
-        SIGN_FLAGS=""
-        if [ "${{ inputs.sign }}" = "true" ]; then
-          SIGN_FLAGS="--sign --sign-generate-key"
-          echo "Signing enabled (ephemeral key)"
-        fi
-
         if [ -n "${{ inputs.image }}" ]; then
           echo "CBOM scanning image: ${{ inputs.image }}"
           knoxctl cbom image \
             --image  "${{ inputs.image }}" \
             --out    "$BOM_FILE" \
-            --format json \
-            $SIGN_FLAGS
+            --format json
         else
           echo "CBOM scanning source: ${{ inputs.path }}"
           knoxctl cbom source "${{ inputs.path }}" \
             --out    "$BOM_FILE" \
-            --format json \
-            $SIGN_FLAGS
+            --format json
         fi
 
     # ── 3c. AIBOM ─────────────────────────────────────────────────────────────
@@ -216,12 +191,6 @@ runs:
       run: |
         set -e
         BOM_FILE="${{ steps.names.outputs.bom_file }}"
-
-        SIGN_FLAGS=""
-        if [ "${{ inputs.sign }}" = "true" ]; then
-          SIGN_FLAGS="--sign --sign-generate-key"
-          echo "Signing enabled (ephemeral key)"
-        fi
 
         if [ "${{ inputs.aibom-source }}" = "bedrock" ]; then
           if [ -z "${{ inputs.aws-region }}" ] \
@@ -237,8 +206,7 @@ runs:
             --access-key-id     "${{ inputs.aws-access-key-id }}" \
             --secret-access-key "${{ inputs.aws-secret-access-key }}" \
             --out               "$BOM_FILE" \
-            --format            json \
-            $SIGN_FLAGS
+            --format            json
 
         else
           if [ -z "${{ inputs.aibom-model }}" ]; then
@@ -250,8 +218,7 @@ runs:
           knoxctl aibom generate \
             --model  "${{ inputs.aibom-model }}" \
             --out    "$BOM_FILE" \
-            --format json \
-            $SIGN_FLAGS
+            --format json
         fi
 
     # ── 4. Validate BOM file ──────────────────────────────────────────────────
@@ -279,8 +246,6 @@ runs:
         echo "BOM file OK ($SIZE bytes, valid JSON)"
 
     # ── 5. Patch BOM JSON ─────────────────────────────────────────────────────
-    # Step A → rename metadata.component.name when it is "." (raw scan target → repo name)
-    # Step B → inject project_name and project_classifier at top, preserving $schema
     - name: Patch BOM JSON
       shell: bash
       env:
