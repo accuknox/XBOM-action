@@ -72,7 +72,7 @@ Add the following under **Settings → Secrets and variables → Actions**.
 > Scans the repository source tree for packages and dependencies.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           sbom
     path:               "."
@@ -110,7 +110,7 @@ Add the following under **Settings → Secrets and variables → Actions**.
     docker build -t "$IMAGE" .
     echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           sbom
     image:              ${{ steps.build.outputs.image }}
@@ -141,7 +141,7 @@ Add the following under **Settings → Secrets and variables → Actions**.
 > Scans Go source for cryptographic algorithms, protocols, and certificates.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           cbom
     path:               "."
@@ -181,7 +181,7 @@ Add the following under **Settings → Secrets and variables → Actions**.
     docker build -t "$IMAGE" .
     echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
 
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           cbom
     image:              ${{ steps.build.outputs.image }}
@@ -212,7 +212,7 @@ Add the following under **Settings → Secrets and variables → Actions**.
 > Inventories an AI/ML model by fetching metadata from the HuggingFace Hub API.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:           aibom
     aibom-source:       huggingface
@@ -245,7 +245,7 @@ Add the following under **Settings → Secrets and variables → Actions**.
 > Inventories all foundation models accessible in your AWS Bedrock account for the given region. Requires AWS credentials with `bedrock:ListFoundationModels` permission.
 
 ```yaml
-- uses: accuknox/xbom-action@1.0
+- uses: accuknox/xbom-action@2.0
   with:
     bom-type:              aibom
     aibom-source:          bedrock
@@ -295,7 +295,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: accuknox/xbom-action@1.0
+      - uses: accuknox/xbom-action@2.0
         with:
           bom-type:           sbom
           path:               "."
@@ -342,7 +342,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: accuknox/xbom-action@1.0
+      - uses: accuknox/xbom-action@2.0
         with:
           bom-type:           sbom
           path:               "."
